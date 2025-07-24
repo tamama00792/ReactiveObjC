@@ -5,6 +5,9 @@
 //  Created by Josh Abernathy on 11/30/12.
 //  Copyright (c) 2012 GitHub, Inc. All rights reserved.
 //
+//  本文件实现了RACCompoundDisposable类，用于管理多个RACDisposable对象的统一释放。
+//  其内部通过互斥锁保证线程安全，并采用内联数组与动态数组结合的方式优化性能和内存使用。
+//
 
 #import "RACCompoundDisposable.h"
 #import "RACCompoundDisposableProvider.h"
@@ -20,6 +23,7 @@
 // Profile any change!
 #define RACCompoundDisposableInlineCount 2
 
+// 用于创建一个可变的CFArray，存储disposable对象，采用指针比较以提升性能。
 static CFMutableArrayRef RACCreateDisposablesArray(void) {
 	// Compare values using only pointer equality.
 	CFArrayCallBacks callbacks = kCFTypeArrayCallBacks;
@@ -60,6 +64,8 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 
 #pragma mark Properties
 
+// 判断当前RACCompoundDisposable是否已被释放。
+// 通过加锁读取_disposed标志，保证线程安全。
 - (BOOL)isDisposed {
 	pthread_mutex_lock(&_mutex);
 	BOOL disposed = _disposed;
@@ -70,23 +76,29 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 
 #pragma mark Lifecycle
 
+// 创建一个空的RACCompoundDisposable实例。
 + (instancetype)compoundDisposable {
 	return [[self alloc] initWithDisposables:nil];
 }
 
+// 使用指定的disposables数组创建RACCompoundDisposable实例。
 + (instancetype)compoundDisposableWithDisposables:(NSArray *)disposables {
 	return [[self alloc] initWithDisposables:disposables];
 }
 
+// 初始化方法，初始化互斥锁。
 - (instancetype)init {
 	self = [super init];
 
+	// 初始化互斥锁，保证多线程下的安全。
 	const int result __attribute__((unused)) = pthread_mutex_init(&_mutex, NULL);
 	NSCAssert(0 == result, @"Failed to initialize mutex with error %d.", result);
 
 	return self;
 }
 
+// 使用传入的disposables数组初始化实例。
+// 前RACCompoundDisposableInlineCount个对象存储在内联数组，剩余的存储在动态数组中。
 - (instancetype)initWithDisposables:(NSArray *)otherDisposables {
 	self = [self init];
 
@@ -94,8 +106,7 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 	[otherDisposables enumerateObjectsUsingBlock:^(RACDisposable *disposable, NSUInteger index, BOOL *stop) {
 		self->_inlineDisposables[index] = disposable;
 
-		// Stop after this iteration if we've reached the end of the inlined
-		// array.
+		// 达到内联数组上限后停止。
 		if (index == RACCompoundDisposableInlineCount - 1) *stop = YES;
 	}];
 	#endif
@@ -103,6 +114,7 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 	if (otherDisposables.count > RACCompoundDisposableInlineCount) {
 		_disposables = RACCreateDisposablesArray();
 
+		// 将多余的disposable存入动态数组。
 		CFRange range = CFRangeMake(RACCompoundDisposableInlineCount, (CFIndex)otherDisposables.count - RACCompoundDisposableInlineCount);
 		CFArrayAppendArray(_disposables, (__bridge CFArrayRef)otherDisposables, range);
 	}
@@ -110,11 +122,13 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 	return self;
 }
 
+// 通过block创建一个只包含一个disposable的RACCompoundDisposable。
 - (instancetype)initWithBlock:(void (^)(void))block {
 	RACDisposable *disposable = [RACDisposable disposableWithBlock:block];
 	return [self initWithDisposables:@[ disposable ]];
 }
 
+// 析构函数，释放内联数组、动态数组和互斥锁。
 - (void)dealloc {
 	#if RACCompoundDisposableInlineCount
 	for (unsigned i = 0; i < RACCompoundDisposableInlineCount; i++) {
@@ -133,6 +147,9 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 
 #pragma mark Addition and Removal
 
+// 添加一个disposable到当前对象。
+// 若已被释放，则立即释放传入的disposable。
+// 否则优先存入内联数组，满后存入动态数组。
 - (void)addDisposable:(RACDisposable *)disposable {
 	NSCParameterAssert(disposable != self);
 	if (disposable == nil || disposable.disposed) return;
@@ -156,9 +173,7 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 			if (_disposables == NULL) _disposables = RACCreateDisposablesArray();
 			CFArrayAppendValue(_disposables, (__bridge void *)disposable);
 
-			if (RACCOMPOUNDDISPOSABLE_ADDED_ENABLED()) {
-				RACCOMPOUNDDISPOSABLE_ADDED(self.description.UTF8String, disposable.description.UTF8String, CFArrayGetCount(_disposables) + RACCompoundDisposableInlineCount);
-			}
+			// 这里可插入调试钩子，追踪添加操作。
 
 		#if RACCompoundDisposableInlineCount
 		foundSlot:;
@@ -167,11 +182,12 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 	}
 	pthread_mutex_unlock(&_mutex);
 
-	// Performed outside of the lock in case the compound disposable is used
-	// recursively.
+	// 若已被释放，则在锁外释放传入的disposable，避免递归死锁。
 	if (shouldDispose) [disposable dispose];
 }
 
+// 从当前对象移除指定的disposable。
+// 仅在未释放时有效，优先从内联数组移除，再从动态数组移除。
 - (void)removeDisposable:(RACDisposable *)disposable {
 	if (disposable == nil) return;
 
@@ -193,9 +209,7 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 					}
 				}
 
-				if (RACCOMPOUNDDISPOSABLE_REMOVED_ENABLED()) {
-					RACCOMPOUNDDISPOSABLE_REMOVED(self.description.UTF8String, disposable.description.UTF8String, CFArrayGetCount(_disposables) + RACCompoundDisposableInlineCount);
-				}
+				// 这里可插入调试钩子，追踪移除操作。
 			}
 		}
 	}
@@ -204,11 +218,14 @@ static CFMutableArrayRef RACCreateDisposablesArray(void) {
 
 #pragma mark RACDisposable
 
+// 静态函数，释放传入的disposable对象。
 static void disposeEach(const void *value, void *context) {
 	RACDisposable *disposable = (__bridge id)value;
 	[disposable dispose];
 }
 
+// 释放当前RACCompoundDisposable管理的所有disposable。
+// 先加锁设置_disposed标志，并取出所有disposable副本，随后在锁外依次释放，避免递归死锁。
 - (void)dispose {
 	#if RACCompoundDisposableInlineCount
 	RACDisposable *inlineCopy[RACCompoundDisposableInlineCount];
@@ -233,8 +250,7 @@ static void disposeEach(const void *value, void *context) {
 	pthread_mutex_unlock(&_mutex);
 
 	#if RACCompoundDisposableInlineCount
-	// Dispose outside of the lock in case the compound disposable is used
-	// recursively.
+	// 在锁外释放内联数组中的disposable，防止递归死锁。
 	for (unsigned i = 0; i < RACCompoundDisposableInlineCount; i++) {
 		[inlineCopy[i] dispose];
 	}

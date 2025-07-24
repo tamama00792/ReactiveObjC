@@ -15,21 +15,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface UITextView (RACSignalSupport)
 
-/// A delegate proxy which will be set as the receiver's delegate when any of the
-/// methods in this category are used.
+/**
+ 获取一个代理代理对象，当本分类中的方法被使用时会自动设置为 UITextView 的 delegate。
+ 适用场景：需要拦截 delegate 方法或响应 delegate 事件时使用。
+ @return RACDelegateProxy 代理对象。
+*/
 @property (nonatomic, strong, readonly) RACDelegateProxy *rac_delegateProxy;
 
-/// Creates a signal for the text of the receiver.
-///
-/// When this method is invoked, the `rac_delegateProxy` will become the
-/// receiver's delegate. Any previous delegate will become the -[RACDelegateProxy
-/// rac_proxiedDelegate], so that it receives any messages that the proxy doesn't
-/// know how to handle. Setting the receiver's `delegate` afterward is
-/// considered undefined behavior.
-///
-/// Returns a signal which will send the current text upon subscription, then
-/// again whenever the receiver's text is changed. The signal will complete when
-/// the receiver is deallocated.
+/**
+ 创建并返回一个信号，用于监听 UITextView 的文本变化。
+ 适用场景：需要实时获取 UITextView 内容变化时使用。
+ @return RACSignal<NSString *> 信号对象，每次文本变化都会发送最新的文本内容，初始值为当前文本。
+*/
 - (RACSignal<NSString *> *)rac_textSignal;
 
 @end

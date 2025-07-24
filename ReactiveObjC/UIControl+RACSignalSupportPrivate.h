@@ -12,20 +12,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+// 该分类为 UIControl 提供了 RACChannel 支持的私有接口，便于响应式编程场景下实现控件属性的双向绑定。
+// 使用场景：当你需要将 UIControl 的属性与信号进行双向绑定时，可通过该分类实现。
 @interface UIControl (RACSignalSupportPrivate)
 
-/// Adds a RACChannel-based interface to the receiver for the given
-/// UIControlEvents and exposes it.
-///
-/// controlEvents - A mask of UIControlEvents on which to send new values.
-/// key           - The key whose value should be read and set when a control
-///                 event fires and when a value is sent to the
-///                 RACChannelTerminal respectively.
-/// nilValue      - The value to be assigned to the key when `nil` is sent to the
-///                 RACChannelTerminal. This value can itself be nil.
-///
-/// Returns a RACChannelTerminal which will send future values from the receiver,
-/// and update the receiver when values are sent to the terminal.
+/**
+ 为控件添加基于 RACChannel 的双向绑定接口。
+ 适用场景：需要将控件属性与信号进行双向绑定时使用。
+ @param controlEvents 需要监听的 UIControlEvents 事件类型。
+ @param key 需要绑定的属性名。
+ @param nilValue 当信号接收到 nil 时设置的默认值。
+ @return RACChannelTerminal：用于绑定和同步属性值。
+*/
 - (RACChannelTerminal *)rac_channelForControlEvents:(UIControlEvents)controlEvents key:(NSString *)key nilValue:(nullable id)nilValue;
 
 @end

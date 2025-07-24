@@ -11,10 +11,12 @@
 #import "RACBlockTrampoline.h"
 #import "RACTuple.h"
 
+// RACStream 是 ReactiveObjC 中流式操作的抽象基类，定义了流的基本操作和组合方式。
 @implementation RACStream
 
 #pragma mark Lifecycle
 
+// 初始化方法，设置默认 name 为空字符串。
 - (instancetype)init {
 	self = [super init];
 
@@ -24,33 +26,39 @@
 
 #pragma mark Abstract methods
 
+// 返回一个空流。该方法为抽象方法，必须由子类实现。
 + (__kindof RACStream *)empty {
-	NSString *reason = [NSString stringWithFormat:@"%@ must be overridden by subclasses", NSStringFromSelector(_cmd)];
+	NSString *reason = [NSString stringWithFormat:@"%@ 必须由子类重写", NSStringFromSelector(_cmd)];
 	@throw [NSException exceptionWithName:NSInternalInconsistencyException reason:reason userInfo:nil];
 }
 
+// 绑定操作，将 block 应用于流中的每个元素。该方法为抽象方法，必须由子类实现。
 - (__kindof RACStream *)bind:(RACStreamBindBlock (^)(void))block {
-	NSString *reason = [NSString stringWithFormat:@"%@ must be overridden by subclasses", NSStringFromSelector(_cmd)];
+	NSString *reason = [NSString stringWithFormat:@"%@ 必须由子类重写", NSStringFromSelector(_cmd)];
 	@throw [NSException exceptionWithName:NSInternalInconsistencyException reason:reason userInfo:nil];
 }
 
+// 返回一个只包含 value 的流。该方法为抽象方法，必须由子类实现。
 + (__kindof RACStream *)return:(id)value {
-	NSString *reason = [NSString stringWithFormat:@"%@ must be overridden by subclasses", NSStringFromSelector(_cmd)];
+	NSString *reason = [NSString stringWithFormat:@"%@ 必须由子类重写", NSStringFromSelector(_cmd)];
 	@throw [NSException exceptionWithName:NSInternalInconsistencyException reason:reason userInfo:nil];
 }
 
+// 将当前流与另一个流串联。该方法为抽象方法，必须由子类实现。
 - (__kindof RACStream *)concat:(RACStream *)stream {
-	NSString *reason = [NSString stringWithFormat:@"%@ must be overridden by subclasses", NSStringFromSelector(_cmd)];
+	NSString *reason = [NSString stringWithFormat:@"%@ 必须由子类重写", NSStringFromSelector(_cmd)];
 	@throw [NSException exceptionWithName:NSInternalInconsistencyException reason:reason userInfo:nil];
 }
 
+// 将当前流与另一个流按元素配对。该方法为抽象方法，必须由子类实现。
 - (__kindof RACStream *)zipWith:(RACStream *)stream {
-	NSString *reason = [NSString stringWithFormat:@"%@ must be overridden by subclasses", NSStringFromSelector(_cmd)];
+	NSString *reason = [NSString stringWithFormat:@"%@ 必须由子类重写", NSStringFromSelector(_cmd)];
 	@throw [NSException exceptionWithName:NSInternalInconsistencyException reason:reason userInfo:nil];
 }
 
 #pragma mark Naming
 
+// 设置流的 name 属性，仅在环境变量 RAC_DEBUG_SIGNAL_NAMES 存在时生效。
 - (instancetype)setNameWithFormat:(NSString *)format, ... {
 	if (getenv("RAC_DEBUG_SIGNAL_NAMES") == NULL) return self;
 
@@ -68,27 +76,32 @@
 
 @end
 
+// MARK: - RACStream 操作扩展
 @implementation RACStream (Operations)
 
+// flattenMap: 将流中的每个元素通过 block 转换为新的流，并将所有流合并为一个流。
 - (__kindof RACStream *)flattenMap:(__kindof RACStream * (^)(id value))block {
 	Class class = self.class;
 
 	return [[self bind:^{
+		// 返回一个 block，每次处理流中的一个元素。
 		return ^(id value, BOOL *stop) {
 			id stream = block(value) ?: [class empty];
-			NSCAssert([stream isKindOfClass:RACStream.class], @"Value returned from -flattenMap: is not a stream: %@", stream);
+			NSCAssert([stream isKindOfClass:RACStream.class], @"-flattenMap: 返回的不是 RACStream 类型: %@", stream);
 
 			return stream;
 		};
 	}] setNameWithFormat:@"[%@] -flattenMap:", self.name];
 }
 
+// flatten: 将流中的元素（本身为流）合并为一个流。
 - (__kindof RACStream *)flatten {
 	return [[self flattenMap:^(id value) {
 		return value;
 	}] setNameWithFormat:@"[%@] -flatten", self.name];
 }
 
+// map: 对流中的每个元素应用 block，并返回新的流。
 - (__kindof RACStream *)map:(id (^)(id value))block {
 	NSCParameterAssert(block != nil);
 
@@ -99,12 +112,14 @@
 	}] setNameWithFormat:@"[%@] -map:", self.name];
 }
 
+// mapReplace: 用 object 替换流中的每个元素。
 - (__kindof RACStream *)mapReplace:(id)object {
 	return [[self map:^(id _) {
 		return object;
 	}] setNameWithFormat:@"[%@] -mapReplace: %@", self.name, RACDescription(object)];
 }
 
+// combinePreviousWithStart:reduce: 结合前一个和当前元素，生成新值。
 - (__kindof RACStream *)combinePreviousWithStart:(id)start reduce:(id (^)(id previous, id next))reduceBlock {
 	NSCParameterAssert(reduceBlock != NULL);
 	return [[[self
@@ -119,6 +134,7 @@
 		setNameWithFormat:@"[%@] -combinePreviousWithStart: %@ reduce:", self.name, RACDescription(start)];
 }
 
+// filter: 过滤流中的元素，仅保留 block 返回 YES 的元素。
 - (__kindof RACStream *)filter:(BOOL (^)(id value))block {
 	NSCParameterAssert(block != nil);
 
@@ -133,28 +149,32 @@
 	}] setNameWithFormat:@"[%@] -filter:", self.name];
 }
 
+// ignore: 忽略等于 value 的元素。
 - (__kindof RACStream *)ignore:(id)value {
 	return [[self filter:^ BOOL (id innerValue) {
 		return innerValue != value && ![innerValue isEqual:value];
 	}] setNameWithFormat:@"[%@] -ignore: %@", self.name, RACDescription(value)];
 }
 
+// reduceEach: 对流中的 RACTuple 元素应用 reduceBlock。
 - (__kindof RACStream *)reduceEach:(RACReduceBlock)reduceBlock {
 	NSCParameterAssert(reduceBlock != nil);
 
 	__weak RACStream *stream __attribute__((unused)) = self;
 	return [[self map:^(RACTuple *t) {
-		NSCAssert([t isKindOfClass:RACTuple.class], @"Value from stream %@ is not a tuple: %@", stream, t);
+		NSCAssert([t isKindOfClass:RACTuple.class], @"流 %@ 的元素不是 RACTuple: %@", stream, t);
 		return [RACBlockTrampoline invokeBlock:reduceBlock withArguments:t];
 	}] setNameWithFormat:@"[%@] -reduceEach:", self.name];
 }
 
+// startWith: 在流前面插入一个元素。
 - (__kindof RACStream *)startWith:(id)value {
 	return [[[self.class return:value]
 		concat:self]
 		setNameWithFormat:@"[%@] -startWith: %@", self.name, RACDescription(value)];
 }
 
+// skip: 跳过前 skipCount 个元素。
 - (__kindof RACStream *)skip:(NSUInteger)skipCount {
 	Class class = self.class;
 	
@@ -170,6 +190,7 @@
 	}] setNameWithFormat:@"[%@] -skip: %lu", self.name, (unsigned long)skipCount];
 }
 
+// take: 只取前 count 个元素。
 - (__kindof RACStream *)take:(NSUInteger)count {
 	Class class = self.class;
 	
@@ -190,14 +211,13 @@
 	}] setNameWithFormat:@"[%@] -take: %lu", self.name, (unsigned long)count];
 }
 
+// join: 将多个流合并为一个流，并通过 block 组合。
 + (__kindof RACStream *)join:(id<NSFastEnumeration>)streams block:(RACStream * (^)(id, id))block {
 	RACStream *current = nil;
 
-	// Creates streams of successively larger tuples by combining the input
-	// streams one-by-one.
+	// 依次将输入流合并为更大的元组流。
 	for (RACStream *stream in streams) {
-		// For the first stream, just wrap its values in a RACTuple. That way,
-		// if only one stream is given, the result is still a stream of tuples.
+		// 第一个流，直接包装为 RACTuple。
 		if (current == nil) {
 			current = [stream map:^(id x) {
 				return RACTuplePack(x);
@@ -212,11 +232,7 @@
 	if (current == nil) return [self empty];
 
 	return [current map:^(RACTuple *xs) {
-		// Right now, each value is contained in its own tuple, sorta like:
-		//
-		// (((1), 2), 3)
-		//
-		// We need to unwrap all the layers and create a tuple out of the result.
+		// 解包嵌套元组，生成最终的 RACTuple。
 		NSMutableArray *values = [[NSMutableArray alloc] init];
 
 		while (xs != nil) {
@@ -228,25 +244,26 @@
 	}];
 }
 
+// zip: 将多个流按顺序配对组合为元组流。
 + (__kindof RACStream *)zip:(id<NSFastEnumeration>)streams {
 	return [[self join:streams block:^(RACStream *left, RACStream *right) {
 		return [left zipWith:right];
 	}] setNameWithFormat:@"+zip: %@", streams];
 }
 
+// zip:reduce: 将多个流配对后应用 reduceBlock 生成新流。
 + (__kindof RACStream *)zip:(id<NSFastEnumeration>)streams reduce:(RACGenericReduceBlock)reduceBlock {
 	NSCParameterAssert(reduceBlock != nil);
 
 	RACStream *result = [self zip:streams];
 
-	// Although we assert this condition above, older versions of this method
-	// supported this argument being nil. Avoid crashing Release builds of
-	// apps that depended on that.
+	// 兼容旧版本 reduceBlock 为空的情况。
 	if (reduceBlock != nil) result = [result reduceEach:reduceBlock];
 
 	return [result setNameWithFormat:@"+zip: %@ reduce:", streams];
 }
 
+// concat: 将多个流顺序串联为一个流。
 + (__kindof RACStream *)concat:(id<NSFastEnumeration>)streams {
 	RACStream *result = self.empty;
 	for (RACStream *stream in streams) {
@@ -256,6 +273,7 @@
 	return [result setNameWithFormat:@"+concat: %@", streams];
 }
 
+// scanWithStart:reduce: 累加操作，对流中的每个元素应用 reduceBlock。
 - (__kindof RACStream *)scanWithStart:(id)startingValue reduce:(id (^)(id running, id next))reduceBlock {
 	NSCParameterAssert(reduceBlock != nil);
 
@@ -267,6 +285,7 @@
 		setNameWithFormat:@"[%@] -scanWithStart: %@ reduce:", self.name, RACDescription(startingValue)];
 }
 
+// scanWithStart:reduceWithIndex: 带索引的累加操作。
 - (__kindof RACStream *)scanWithStart:(id)startingValue reduceWithIndex:(id (^)(id, id, NSUInteger))reduceBlock {
 	NSCParameterAssert(reduceBlock != nil);
 
@@ -283,6 +302,7 @@
 	}] setNameWithFormat:@"[%@] -scanWithStart: %@ reduceWithIndex:", self.name, RACDescription(startingValue)];
 }
 
+// takeUntilBlock: 满足 predicate 时停止取值。
 - (__kindof RACStream *)takeUntilBlock:(BOOL (^)(id x))predicate {
 	NSCParameterAssert(predicate != nil);
 
@@ -297,6 +317,7 @@
 	}] setNameWithFormat:@"[%@] -takeUntilBlock:", self.name];
 }
 
+// takeWhileBlock: 只要 predicate 返回 YES 就持续取值。
 - (__kindof RACStream *)takeWhileBlock:(BOOL (^)(id x))predicate {
 	NSCParameterAssert(predicate != nil);
 
@@ -305,6 +326,7 @@
 	}] setNameWithFormat:@"[%@] -takeWhileBlock:", self.name];
 }
 
+// skipUntilBlock: 满足 predicate 前跳过所有元素。
 - (__kindof RACStream *)skipUntilBlock:(BOOL (^)(id x))predicate {
 	NSCParameterAssert(predicate != nil);
 
@@ -327,6 +349,7 @@
 	}] setNameWithFormat:@"[%@] -skipUntilBlock:", self.name];
 }
 
+// skipWhileBlock: 只要 predicate 返回 YES 就跳过。
 - (__kindof RACStream *)skipWhileBlock:(BOOL (^)(id x))predicate {
 	NSCParameterAssert(predicate != nil);
 
@@ -335,6 +358,7 @@
 	}] setNameWithFormat:@"[%@] -skipWhileBlock:", self.name];
 }
 
+// distinctUntilChanged: 过滤掉连续重复的元素。
 - (__kindof RACStream *)distinctUntilChanged {
 	Class class = self.class;
 

@@ -15,21 +15,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface UIImagePickerController (RACSignalSupport)
 
-/// A delegate proxy which will be set as the receiver's delegate when any of the
-/// methods in this category are used.
+/**
+ 获取 RACDelegateProxy 代理对象。
+ 适用场景：需要拦截 delegate 方法或响应 delegate 事件时使用。
+ @return RACDelegateProxy 代理对象。
+*/
 @property (nonatomic, strong, readonly) RACDelegateProxy *rac_delegateProxy;
 
-/// Creates a signal for every new selected image.
-///
-/// When this method is invoked, the `rac_delegateProxy` will become the
-/// receiver's delegate. Any previous delegate will become the -[RACDelegateProxy
-/// rac_proxiedDelegate], so that it receives any messages that the proxy doesn't
-/// know how to handle. Setting the receiver's `delegate` afterward is considered
-/// undefined behavior.
-///
-/// Returns a signal which will send the dictionary with info for the selected image.
-/// Caller is responsible for picker controller dismissal. The signal will complete
-/// itself when the receiver is deallocated or when user cancels selection.
+/**
+ 创建一个信号，用于监听用户选择图片的事件。
+ 适用场景：需要响应用户选择图片或取消选择时使用。
+ @return RACSignal<NSDictionary *>：每次选择图片时发送图片信息字典，用户取消或控件销毁时信号自动完成。
+*/
 - (RACSignal<NSDictionary *> *)rac_imageSelectedSignal;
 
 @end

@@ -12,11 +12,15 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+// 该分类为 UIButton 提供了 RACCommand 支持，便于响应式编程场景下绑定按钮命令。
+// 使用场景：当你需要在按钮点击时自动执行命令并绑定按钮可用状态时，可通过该分类实现。
 @interface UIButton (RACCommandSupport)
 
-/// Sets the button's command. When the button is clicked, the command is
-/// executed with the sender of the event. The button's enabledness is bound
-/// to the command's `canExecute`.
+/**
+ 绑定一个 RACCommand 到 UIButton。
+ 适用场景：需要在按钮点击时自动执行命令，并根据命令的 enabled 状态自动更新按钮可用性。
+ @property rac_command 绑定的命令对象，类型为 RACCommand<UIButton *, id>。
+*/
 @property (nonatomic, strong, nullable) RACCommand<__kindof UIButton *, id> *rac_command;
 
 @end
