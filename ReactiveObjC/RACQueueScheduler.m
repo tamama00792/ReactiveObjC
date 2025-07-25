@@ -11,10 +11,21 @@
 #import "RACQueueScheduler+Subclass.h"
 #import "RACScheduler+Private.h"
 
+/**
+ * @class RACQueueScheduler
+ * @brief 基于GCD队列的调度器，支持异步、延迟、定时任务调度。
+ * @discussion 适用于需要在指定队列上调度任务的场景，如后台并发、串行队列等。
+ */
 @implementation RACQueueScheduler
 
 #pragma mark Lifecycle
 
+/**
+ * @brief 以名称和GCD队列初始化调度器。
+ * @param name 调度器名称。
+ * @param queue GCD队列。
+ * @return 返回RACQueueScheduler实例。
+ */
 - (instancetype)initWithName:(NSString *)name queue:(dispatch_queue_t)queue {
 	NSCParameterAssert(queue != NULL);
 
@@ -30,6 +41,9 @@
 
 #if !OS_OBJECT_USE_OBJC
 
+/**
+ * @brief 析构函数，释放GCD队列资源（非ARC下）。
+ */
 - (void)dealloc {
 	if (_queue != NULL) {
 		dispatch_release(_queue);
@@ -41,6 +55,11 @@
 
 #pragma mark Date Conversions
 
+/**
+ * @brief 将NSDate转换为dispatch_time_t（wall time）。
+ * @param date 目标时间。
+ * @return dispatch_time_t类型的wall time。
+ */
 + (dispatch_time_t)wallTimeWithDate:(NSDate *)date {
 	NSCParameterAssert(date != nil);
 
@@ -57,6 +76,12 @@
 
 #pragma mark RACScheduler
 
+/**
+ * @brief 异步调度block到队列执行。
+ * @param block 需要调度执行的block。
+ * @return 返回RACDisposable对象。
+ * @discussion 任务会异步提交到队列，支持取消。
+ */
 - (RACDisposable *)schedule:(void (^)(void))block {
 	NSCParameterAssert(block != NULL);
 
@@ -70,6 +95,13 @@
 	return disposable;
 }
 
+/**
+ * @brief 延迟调度block到队列执行。
+ * @param date 目标时间。
+ * @param block 需要调度执行的block。
+ * @return 返回RACDisposable对象。
+ * @discussion 到达目标时间后异步提交到队列，支持取消。
+ */
 - (RACDisposable *)after:(NSDate *)date schedule:(void (^)(void))block {
 	NSCParameterAssert(date != nil);
 	NSCParameterAssert(block != NULL);
@@ -84,6 +116,15 @@
 	return disposable;
 }
 
+/**
+ * @brief 定时重复调度block到队列执行。
+ * @param date 首次执行时间。
+ * @param interval 重复间隔（秒）。
+ * @param leeway 系统允许的最大误差（秒）。
+ * @param block 需要调度执行的block。
+ * @return 返回RACDisposable对象。
+ * @discussion 使用GCD定时器，支持取消。
+ */
 - (RACDisposable *)after:(NSDate *)date repeatingEvery:(NSTimeInterval)interval withLeeway:(NSTimeInterval)leeway schedule:(void (^)(void))block {
 	NSCParameterAssert(date != nil);
 	NSCParameterAssert(interval > 0.0 && interval < INT64_MAX / NSEC_PER_SEC);

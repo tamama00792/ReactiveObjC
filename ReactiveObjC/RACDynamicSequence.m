@@ -16,73 +16,49 @@
 // sequences.
 #define DEALLOC_OVERFLOW_GUARD 100
 
+/**
+ * @class RACDynamicSequence
+ * @brief 支持惰性求值和依赖注入的动态序列。
+ * @discussion 适用于链式、递归、无限序列等场景，支持依赖延迟初始化。
+ */
 @interface RACDynamicSequence () {
-	// The value for the "head" property, if it's been evaluated already.
-	//
-	// Because it's legal for head to be nil, this ivar is valid any time
-	// headBlock is nil.
-	//
-	// This ivar should only be accessed while synchronized on self.
+	// 已求值的head缓存。
+	// 仅当headBlock为nil时有效。
+	// 仅在@synchronized(self)下访问。
 	id _head;
 
-	// The value for the "tail" property, if it's been evaluated already.
-	//
-	// Because it's legal for tail to be nil, this ivar is valid any time
-	// tailBlock is nil.
-	//
-	// This ivar should only be accessed while synchronized on self.
+	// 已求值的tail缓存。
+	// 仅当tailBlock为nil时有效。
+	// 仅在@synchronized(self)下访问。
 	RACSequence *_tail;
 
-	// The result of an evaluated `dependencyBlock`.
-	//
-	// This ivar is valid any time `hasDependency` is YES and `dependencyBlock`
-	// is nil.
-	//
-	// This ivar should only be accessed while synchronized on self.
+	// 已求值的依赖对象。
+	// 仅当hasDependency为YES且dependencyBlock为nil时有效。
+	// 仅在@synchronized(self)下访问。
 	id _dependency;
 }
 
-// A block used to evaluate head. This should be set to nil after `_head` has been
-// initialized.
-//
-// This is marked `strong` instead of `copy` because of some bizarre block
-// copying bug. See https://github.com/ReactiveCocoa/ReactiveCocoa/pull/506.
-//
-// The signature of this block varies based on the value of `hasDependency`:
-//
-//  - If YES, this block is of type `id (^)(id)`.
-//  - If NO, this block is of type `id (^)(void)`.
-//
-// This property should only be accessed while synchronized on self.
+/**
+ * @brief 计算head的block。
+ * @discussion 求值后应置为nil。类型随hasDependency而变。
+ */
 @property (nonatomic, strong) id headBlock;
 
-// A block used to evaluate tail. This should be set to nil after `_tail` has been
-// initialized.
-//
-// This is marked `strong` instead of `copy` because of some bizarre block
-// copying bug. See https://github.com/ReactiveCocoa/ReactiveCocoa/pull/506.
-//
-// The signature of this block varies based on the value of `hasDependency`:
-//
-//  - If YES, this block is of type `RACSequence * (^)(id)`.
-//  - If NO, this block is of type `RACSequence * (^)(void)`.
-//
-// This property should only be accessed while synchronized on self.
+/**
+ * @brief 计算tail的block。
+ * @discussion 求值后应置为nil。类型随hasDependency而变。
+ */
 @property (nonatomic, strong) id tailBlock;
 
-// Whether the receiver was initialized with a `dependencyBlock`.
-//
-// This property should only be accessed while synchronized on self.
+/**
+ * @brief 是否有依赖block。
+ */
 @property (nonatomic, assign) BOOL hasDependency;
 
-// A dependency which must be evaluated before `headBlock` and `tailBlock`. This
-// should be set to nil after `_dependency` and `dependencyBlockExecuted` have
-// been set.
-//
-// This is marked `strong` instead of `copy` because of some bizarre block
-// copying bug. See https://github.com/ReactiveCocoa/ReactiveCocoa/pull/506.
-//
-// This property should only be accessed while synchronized on self.
+/**
+ * @brief 依赖的延迟初始化block。
+ * @discussion 求值后应置为nil。
+ */
 @property (nonatomic, strong) id (^dependencyBlock)(void);
 
 @end
@@ -91,6 +67,13 @@
 
 #pragma mark Lifecycle
 
+/**
+ * @brief 以headBlock和tailBlock创建动态序列。
+ * @param headBlock 计算head的block。
+ * @param tailBlock 计算tail的block。
+ * @return 返回RACDynamicSequence对象。
+ * @discussion 不带依赖的惰性序列。
+ */
 + (RACSequence *)sequenceWithHeadBlock:(id (^)(void))headBlock tailBlock:(RACSequence<id> *(^)(void))tailBlock {
 	NSCParameterAssert(headBlock != nil);
 
@@ -101,6 +84,14 @@
 	return seq;
 }
 
+/**
+ * @brief 以依赖block、headBlock和tailBlock创建动态序列。
+ * @param dependencyBlock 依赖的延迟初始化block。
+ * @param headBlock 计算head的block，参数为依赖对象。
+ * @param tailBlock 计算tail的block，参数为依赖对象。
+ * @return 返回RACDynamicSequence对象。
+ * @discussion 支持依赖注入的惰性序列。
+ */
 + (RACSequence *)sequenceWithLazyDependency:(id (^)(void))dependencyBlock headBlock:(id (^)(id dependency))headBlock tailBlock:(RACSequence *(^)(id dependency))tailBlock {
 	NSCParameterAssert(dependencyBlock != nil);
 	NSCParameterAssert(headBlock != nil);
@@ -113,14 +104,17 @@
 	return seq;
 }
 
+/**
+ * @brief 析构函数，防止递归释放导致栈溢出。
+ * @discussion 超过阈值时将tail放入自动释放池，避免递归。
+ */
 - (void)dealloc {
 	static volatile int32_t directDeallocCount = 0;
 
 	if (OSAtomicIncrement32(&directDeallocCount) >= DEALLOC_OVERFLOW_GUARD) {
 		OSAtomicAdd32(-DEALLOC_OVERFLOW_GUARD, &directDeallocCount);
 
-		// Put this sequence's tail onto the autorelease pool so we stop
-		// recursing.
+		// 将tail放入自动释放池，防止递归。
 		__autoreleasing RACSequence *tail __attribute__((unused)) = _tail;
 	}
 	
@@ -129,6 +123,12 @@
 
 #pragma mark RACSequence
 
+/**
+ * @brief 获取序列的head。
+ * @return 返回head元素。
+ * @discussion 支持依赖注入和惰性求值，线程安全。
+ * @实现原理 分为两种情况：有依赖和无依赖，均在@synchronized(self)下求值并缓存。
+ */
 - (id)head {
 	@synchronized (self) {
 		id untypedHeadBlock = self.headBlock;
@@ -152,6 +152,12 @@
 	}
 }
 
+/**
+ * @brief 获取序列的tail。
+ * @return 返回tail序列。
+ * @discussion 支持依赖注入和惰性求值，线程安全。
+ * @实现原理 分为两种情况：有依赖和无依赖，均在@synchronized(self)下求值并缓存。
+ */
 - (RACSequence *)tail {
 	@synchronized (self) {
 		id untypedTailBlock = self.tailBlock;
@@ -179,6 +185,10 @@
 
 #pragma mark NSObject
 
+/**
+ * @brief 返回对象描述信息。
+ * @return 包含类名、指针、name、head、tail的字符串。
+ */
 - (NSString *)description {
 	id head = @"(unresolved)";
 	id tail = @"(unresolved)";
