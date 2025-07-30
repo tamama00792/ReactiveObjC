@@ -7,186 +7,149 @@
  */
 
 /**
- * Executes one or more expressions (which may have a void type, such as a call
- * to a function that returns no value) and always returns true.
+ * 执行一个或多个表达式（可能返回void类型），并始终返回true
+ * 用于在需要返回值的上下文中执行副作用操作
  */
 #define metamacro_exprify(...) \
     ((__VA_ARGS__), true)
 
 /**
- * Returns a string representation of VALUE after full macro expansion.
+ * 将VALUE转换为字符串表示（在宏完全展开后）
+ * 例如：metamacro_stringify(hello) -> "hello"
  */
 #define metamacro_stringify(VALUE) \
         metamacro_stringify_(VALUE)
 
 /**
- * Returns A and B concatenated after full macro expansion.
+ * 将A和B连接起来（在宏完全展开后）
+ * 例如：metamacro_concat(hello, world) -> helloworld
  */
 #define metamacro_concat(A, B) \
         metamacro_concat_(A, B)
 
 /**
- * Returns the Nth variadic argument (starting from zero). At least
- * N + 1 variadic arguments must be given. N must be between zero and twenty,
- * inclusive.
+ * 返回第N个可变参数（从0开始）
+ * 至少需要N+1个参数，N必须在0到20之间
+ * 例如：metamacro_at(1, a, b, c) -> b
  */
 #define metamacro_at(N, ...) \
         metamacro_concat(metamacro_at, N)(__VA_ARGS__)
 
 /**
- * Returns the number of arguments (up to twenty) provided to the macro. At
- * least one argument must be provided.
- *
- * Inspired by P99: http://p99.gforge.inria.fr
+ * 返回提供给宏的参数数量（最多20个）
+ * 至少需要提供一个参数
+ * 例如：metamacro_argcount(a, b, c) -> 3
  */
 #define metamacro_argcount(...) \
         metamacro_at(20, __VA_ARGS__, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
 
 /**
- * Identical to #metamacro_foreach_cxt, except that no CONTEXT argument is
- * given. Only the index and current argument will thus be passed to MACRO.
+ * 对每个连续的可变参数调用MACRO，传递索引和参数
+ * 结果用SEP分隔
+ * 例如：metamacro_foreach(MY_MACRO, , a, b, c)
  */
 #define metamacro_foreach(MACRO, SEP, ...) \
         metamacro_foreach_cxt(metamacro_foreach_iter, SEP, MACRO, __VA_ARGS__)
 
 /**
- * For each consecutive variadic argument (up to twenty), MACRO is passed the
- * zero-based index of the current argument, CONTEXT, and then the argument
- * itself. The results of adjoining invocations of MACRO are then separated by
- * SEP.
- *
- * Inspired by P99: http://p99.gforge.inria.fr
+ * 对每个连续的可变参数调用MACRO，传递索引、CONTEXT和参数
+ * 结果用SEP分隔
  */
 #define metamacro_foreach_cxt(MACRO, SEP, CONTEXT, ...) \
         metamacro_concat(metamacro_foreach_cxt, metamacro_argcount(__VA_ARGS__))(MACRO, SEP, CONTEXT, __VA_ARGS__)
 
 /**
- * Identical to #metamacro_foreach_cxt. This can be used when the former would
- * fail due to recursive macro expansion.
+ * 递归版本的foreach_cxt，用于避免递归宏展开问题
  */
 #define metamacro_foreach_cxt_recursive(MACRO, SEP, CONTEXT, ...) \
         metamacro_concat(metamacro_foreach_cxt_recursive, metamacro_argcount(__VA_ARGS__))(MACRO, SEP, CONTEXT, __VA_ARGS__)
 
 /**
- * In consecutive order, appends each variadic argument (up to twenty) onto
- * BASE. The resulting concatenations are then separated by SEP.
- *
- * This is primarily useful to manipulate a list of macro invocations into instead
- * invoking a different, possibly related macro.
+ * 将每个可变参数连接到BASE上，结果用SEP分隔
+ * 主要用于操作宏调用列表
  */
 #define metamacro_foreach_concat(BASE, SEP, ...) \
         metamacro_foreach_cxt(metamacro_foreach_concat_iter, SEP, BASE, __VA_ARGS__)
 
 /**
- * Iterates COUNT times, each time invoking MACRO with the current index
- * (starting at zero) and CONTEXT. The results of adjoining invocations of MACRO
- * are then separated by SEP.
- *
- * COUNT must be an integer between zero and twenty, inclusive.
+ * 迭代COUNT次，每次调用MACRO并传递当前索引和CONTEXT
+ * COUNT必须在0到20之间
  */
 #define metamacro_for_cxt(COUNT, MACRO, SEP, CONTEXT) \
         metamacro_concat(metamacro_for_cxt, COUNT)(MACRO, SEP, CONTEXT)
 
 /**
- * Returns the first argument given. At least one argument must be provided.
- *
- * This is useful when implementing a variadic macro, where you may have only
- * one variadic argument, but no way to retrieve it (for example, because \c ...
- * always needs to match at least one argument).
- *
- * @code
-
-#define varmacro(...) \
-    metamacro_head(__VA_ARGS__)
-
- * @endcode
+ * 返回第一个参数
+ * 在实现可变参数宏时很有用
+ * 例如：metamacro_head(a, b, c) -> a
  */
 #define metamacro_head(...) \
         metamacro_head_(__VA_ARGS__, 0)
 
 /**
- * Returns every argument except the first. At least two arguments must be
- * provided.
+ * 返回除第一个参数外的所有参数
+ * 至少需要两个参数
+ * 例如：metamacro_tail(a, b, c) -> b, c
  */
 #define metamacro_tail(...) \
         metamacro_tail_(__VA_ARGS__)
 
 /**
- * Returns the first N (up to twenty) variadic arguments as a new argument list.
- * At least N variadic arguments must be provided.
+ * 返回前N个可变参数作为新的参数列表
+ * 至少需要N个参数
  */
 #define metamacro_take(N, ...) \
         metamacro_concat(metamacro_take, N)(__VA_ARGS__)
 
 /**
- * Removes the first N (up to twenty) variadic arguments from the given argument
- * list. At least N variadic arguments must be provided.
+ * 从参数列表中移除前N个参数
+ * 至少需要N个参数
  */
 #define metamacro_drop(N, ...) \
         metamacro_concat(metamacro_drop, N)(__VA_ARGS__)
 
 /**
- * Decrements VAL, which must be a number between zero and twenty, inclusive.
- *
- * This is primarily useful when dealing with indexes and counts in
- * metaprogramming.
+ * 将VAL减1，VAL必须在0到20之间
+ * 用于元编程中的索引和计数
  */
 #define metamacro_dec(VAL) \
         metamacro_at(VAL, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
 
 /**
- * Increments VAL, which must be a number between zero and twenty, inclusive.
- *
- * This is primarily useful when dealing with indexes and counts in
- * metaprogramming.
+ * 将VAL加1，VAL必须在0到20之间
+ * 用于元编程中的索引和计数
  */
 #define metamacro_inc(VAL) \
         metamacro_at(VAL, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
 
 /**
- * If A is equal to B, the next argument list is expanded; otherwise, the
- * argument list after that is expanded. A and B must be numbers between zero
- * and twenty, inclusive. Additionally, B must be greater than or equal to A.
- *
- * @code
-
-// expands to true
-metamacro_if_eq(0, 0)(true)(false)
-
-// expands to false
-metamacro_if_eq(0, 1)(true)(false)
-
- * @endcode
- *
- * This is primarily useful when dealing with indexes and counts in
- * metaprogramming.
+ * 如果A等于B，展开下一个参数列表；否则展开再下一个参数列表
+ * A和B必须在0到20之间，且B必须大于等于A
+ * 例如：metamacro_if_eq(0, 0)(true)(false) -> true
  */
 #define metamacro_if_eq(A, B) \
         metamacro_concat(metamacro_if_eq, A)(B)
 
 /**
- * Identical to #metamacro_if_eq. This can be used when the former would fail
- * due to recursive macro expansion.
+ * 递归版本的if_eq，用于避免递归宏展开问题
  */
 #define metamacro_if_eq_recursive(A, B) \
         metamacro_concat(metamacro_if_eq_recursive, A)(B)
 
 /**
- * Returns 1 if N is an even number, or 0 otherwise. N must be between zero and
- * twenty, inclusive.
- *
- * For the purposes of this test, zero is considered even.
+ * 如果N是偶数返回1，否则返回0
+ * N必须在0到20之间，0被认为是偶数
  */
 #define metamacro_is_even(N) \
         metamacro_at(N, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1)
 
 /**
- * Returns the logical NOT of B, which must be the number zero or one.
+ * 返回B的逻辑非，B必须是0或1
  */
 #define metamacro_not(B) \
         metamacro_at(B, 1, 0)
 
-// IMPLEMENTATION DETAILS FOLLOW!
+// 以下是实现细节，不要依赖这些代码！
 // Do not write code that depends on anything below this line.
 #define metamacro_stringify_(VALUE) # VALUE
 #define metamacro_concat_(A, B) A ## B
